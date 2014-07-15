@@ -50,6 +50,10 @@ def generate_requirements(packages, target_dir, tarball_dir):
     """
     req_format = '{0}{1}{2}\n\n'
     requirements = open('requirements.txt', 'w')
+
+    if not os.path.exists(tarball_dir):
+        os.makedirs(tarball_dir)
+
     for name, url in packages.items():
         if name in target_dir.split('/'):
             print "Don't download the current project: {0}".format(name)
@@ -59,9 +63,12 @@ def generate_requirements(packages, target_dir, tarball_dir):
         if not os.path.exists(tarball):
             print "Downloading {0}...".format(tarball)
             req = requests.get(url, stream=True)
-            with open(tarball, 'w') as f:
-                for chunk in req.iter_content():
-                    f.write(chunk)
+            try:
+                with open(tarball, 'w') as f:
+                    for chunk in req.iter_content():
+                        f.write(chunk)
+            except:
+                pass
         else:
             print "Package {0} already exists.".format(name)
 
