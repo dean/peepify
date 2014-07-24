@@ -29,7 +29,7 @@ def download(target_fn, url):
 
     # Use curl if it exists. Otherwise use requests.
     if USE_CURL:
-        subprocess.check_output(['curl', '--silent', '-o', target_fn, url])
+        subprocess.check_output(['curl', '--silent', '-L', '-o', target_fn, url])
         return
 
     req = requests.get(url, stream=True)
@@ -107,7 +107,7 @@ def generate_requirements(packages, target_dir, tarball_dir):
                 print "Don't download the current project: {0}".format(name)
                 continue
 
-            tarball = os.path.join(tarball_dir, name + '.tar.bz')
+            tarball = os.path.join(tarball_dir, name + '.tar.gz')
             download(tarball, url)
 
             print 'Hashing....'
