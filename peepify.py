@@ -2,8 +2,49 @@ import argparse
 import os
 import re
 import subprocess
+import sys
 
 import requests
+from OpenSSL.SSL import ZeroReturnError
+
+
+def bin_exists(binary):
+    """Determine whether a specified binary exists on PATH"""
+    try:
+        subprocess.check_output(['which', binary])
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+USE_CURL = bin_exists('curl')
+
+
+def download(target_fn, url):
+    if os.path.exists(target_fn):
+        print '{0} already downloaded.'.format(url)
+        return
+
+    print "Downloading {0}...".format(target_fn)
+
+    # Use curl if it exists. Otherwise use requests.
+    if USE_CURL:
+        subprocess.check_output(['curl', '--silent', '-L', '-o', target_fn, url])
+        return
+
+    req = requests.get(url, stream=True)
+    with open(target_fn + '.tmp', 'w') as f:
+        try:
+            for chunk in req.iter_content():
+                f.write(chunk)
+        except ZeroReturnError:
+            # Get this when there's no more data to
+            # retrieve and for some reason this gets
+            # kicked up as an exception rather than
+            # handled appropriately. Regardless, it means
+            # we have the whole file.
+            pass
+    os.rename(target_fn + '.tmp', target_fn)
 
 
 def get_packages(target_dir):
@@ -35,8 +76,12 @@ def get_packages(target_dir):
         original_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
         original_hash = original_hash.rstrip()
 
-        tarball_url = '{0}/archive/{1}.tar.gz'
-        packages[package_name] = tarball_url.format(remote, original_hash)
+        revname = subprocess.check_output(['git', 'name-rev', '--name-only', 'HEAD'])
+
+        packages[package_name] = (
+            revname,
+            '{0}/archive/{1}.tar.gz'.format(remote, original_hash))
+
         os.chdir('../')
     return packages
 
@@ -49,35 +94,32 @@ def generate_requirements(packages, target_dir, tarball_dir):
     @arg: tarball_dir: Directory for downlaoding tar files.
     """
     req_format = '{0}{1}{2}\n\n'
-    requirements = open('requirements.txt', 'w')
+    req_fn = os.path.abspath('requirements.txt')
 
     if not os.path.exists(tarball_dir):
         os.makedirs(tarball_dir)
 
-    for name, url in packages.items():
-        if name in target_dir.split('/'):
-            print "Don't download the current project: {0}".format(name)
-            continue
+    with open(req_fn, 'w') as requirements:
+        for name, data in packages.items():
+            revname, url = data
 
-        tarball = os.path.join(tarball_dir, name + '.tar.bz')
-        if not os.path.exists(tarball):
-            print "Downloading {0}...".format(tarball)
-            req = requests.get(url, stream=True)
-            try:
-                with open(tarball, 'w') as f:
-                    for chunk in req.iter_content():
-                        f.write(chunk)
-            except:
-                pass
-        else:
-            print "Package {0} already exists.".format(name)
+            if name in target_dir.split('/'):
+                print "Don't download the current project: {0}".format(name)
+                continue
 
-        peep_hash = subprocess.check_output(['peep', 'hash', tarball])
-        egg_ext = '#egg={0}'.format(name)
-        install = req_format.format(peep_hash, url, egg_ext)
-        requirements.write(install)
+            tarball = os.path.join(tarball_dir, name + '.tar.gz')
+            download(tarball, url)
 
-    requirements.close()
+            print 'Hashing....'
+            peep_hash = subprocess.check_output(['peep', 'hash', tarball])
+            egg_ext = '#egg={0}'.format(name)
+
+            requirements.write('# {0}: {1}'.format(name, revname))
+            requirements.write(req_format.format(peep_hash, url, egg_ext))
+
+    print 'Requirements file generated.'
+    print 'You can find it at {0}.'.format(req_fn)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='peepify')
@@ -86,6 +128,11 @@ if __name__ == '__main__':
     parser.add_argument('--tarballs-dir', help='Directory to store tarballs.',
                         default='.')
     args = parser.parse_args()
+
+    # Verify peep is installed. Otherwise bail.
+    if not bin_exists('peep'):
+        print '"peep" is not in your PATH. Please install it.'
+        sys.exit(1)
 
     cwd = os.getcwd()
     packages = get_packages(args.target_dir)
