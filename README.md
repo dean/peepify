@@ -33,7 +33,7 @@ Prints all of the requirements from a typical /packages directory.
 It does this by going into the target folder, finding all the VERSION
 files it can, then recording versions on the installed packages.
 
-Anything that can does not have a version will be mentioned as well.
+Anything that does not have a version will be mentioned as well.
 
 Usage::
 
