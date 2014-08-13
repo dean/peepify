@@ -1,20 +1,19 @@
 peepify
 =======
 
-Creates a peep-compatible requirements file for a directory of git submodules.
+Creates a peep-compatible requirements file for the git submodules of your project!.
 
-Point peepify at at a directory of git submodules and it'll generate a
-requirements file for them!
+Point peepify at a project and it will generate a requirements file for
+its submodules.
 
 Usage::
 
-    python peepify.py [-h] --target-dir TARGET_DIR [--tarballs-dir TARBALLS_DIR]
+    python peepify.py [-h] --project-dir PROJECT_DIR [--tarballs-dir TARBALLS_DIR]
 
 
 Example::
 
-    $ cd fjord
-    $ peepify.py --target-dir vendor/src/ --tarballs_dir tarballs/
+    $ peepify.py --project-dir fjord/ --tarballs_dir tarballs/
 
 
 Requirements:
