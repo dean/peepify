@@ -3,9 +3,9 @@ import os
 import re
 import subprocess
 import sys
+from OpenSSL.SSL import ZeroReturnError
 
 import requests
-from OpenSSL.SSL import ZeroReturnError
 
 
 def bin_exists(binary):
@@ -21,6 +21,7 @@ USE_CURL = bin_exists('curl')
 
 
 def download(target_fn, url):
+    """Puts the downloaded file from `url` at `target_fn`."""
     if os.path.exists(target_fn):
         print '{0} already downloaded.'.format(url)
         return
@@ -29,7 +30,8 @@ def download(target_fn, url):
 
     # Use curl if it exists. Otherwise use requests.
     if USE_CURL:
-        subprocess.check_output(['curl', '--silent', '-L', '-o', target_fn, url])
+        subprocess.check_output(
+            ['curl', '--silent', '-L', '-o', target_fn, url])
         return
 
     req = requests.get(url, stream=True)
@@ -47,50 +49,55 @@ def download(target_fn, url):
     os.rename(target_fn + '.tmp', target_fn)
 
 
-def get_packages(target_dir):
+def get_packages(project_dir):
     """Generate package names and github urls from git submodules.
 
-    @arg: target_dir: Directory with submodules.
+    @arg: project_dir: Project directory.
     """
-    os.chdir(target_dir)
-    all_paths = [o for o in os.listdir('.')
-                 if os.path.isdir(o)]
-    packages = {}
-    for directory in all_paths:
-        os.chdir(directory)
-        remotes = subprocess.check_output(['git', 'remote', '-v'])
-        full_remote = remotes.split('\n')[0]
+    os.chdir(project_dir)
+    project_cwd = os.getcwd()
 
-        # Example full_remote: origin\tgit@github.com/dean/peepify.git (fetch)
-        remote_re = re.compile('^.*\\t(.+?)(?:\.git)? \((?:fetch|push)\)$')
-        match = remote_re.match(full_remote)
-        if not match:
-            print "Fetch url mal-formated: {0}".format(full_remote)
-            continue
+    if not os.path.exists('.gitmodules'):
+        raise Exception(".gitmodules not found!")
 
-        remote = match.group(1)
-        if remote.startswith('git://'):
-            remote = remote.replace('git://', 'https://', 1)
+    submodules = {}
+    with open('.gitmodules') as gitmodules:
+        lines = [line.rstrip() for line in gitmodules]
+        for i in xrange(0, len(lines)/3, 3):
+            path = lines[i+1].split(' = ')[1]
+            url = lines[i+2].split(' = ')[1]
 
-        package_name = remote.split('/')[-1]
-        original_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
-        original_hash = original_hash.rstrip()
+            os.chdir(path)
 
-        revname = subprocess.check_output(['git', 'name-rev', '--name-only', 'HEAD'])
+            # Revision name
+            revname = subprocess.check_output(
+                ['git', 'name-rev', '--name-only', 'HEAD']).rstrip()
 
-        packages[package_name] = (
-            revname,
-            '{0}/archive/{1}.tar.gz'.format(remote, original_hash))
+            # Current commit hash
+            commit_hash = subprocess.check_output(
+                ['git', 'rev-parse', 'HEAD']).rstrip()
 
-        os.chdir('../')
-    return packages
+            # Fix url if it's broken.
+            if url.startswith('git://'):
+                url = url.replace('git://', 'https://', 1)
+            if url.endswith('.git'):
+                url = url[:-4]
+
+            package_name = path.split('/')[-1]
+            submodules[package_name] = (
+                revname,
+                '{0}/archive/{1}.tar.gz'.format(url, commit_hash))
+
+            os.chdir(project_cwd)
+
+    return submodules
 
 
-def generate_requirements(packages, target_dir, tarball_dir):
+def generate_requirements(packages, project_dir, tarball_dir):
     """Generates a requirement file from a list of packages.
 
     @arg: packages: Package names and urls.
-    @arg: target_dir: Target directory for git submodules.
+    @arg: project_dir: Project directory.
     @arg: tarball_dir: Directory for downlaoding tar files.
     """
     req_format = '{0}{1}{2}\n\n'
@@ -103,10 +110,6 @@ def generate_requirements(packages, target_dir, tarball_dir):
         for name, data in packages.items():
             revname, url = data
 
-            if name in target_dir.split('/'):
-                print "Don't download the current project: {0}".format(name)
-                continue
-
             tarball = os.path.join(tarball_dir, name + '.tar.gz')
             download(tarball, url)
 
@@ -114,7 +117,7 @@ def generate_requirements(packages, target_dir, tarball_dir):
             peep_hash = subprocess.check_output(['peep', 'hash', tarball])
             egg_ext = '#egg={0}'.format(name)
 
-            requirements.write('# {0}: {1}'.format(name, revname))
+            requirements.write('# {0}: {1}\n'.format(name, revname))
             requirements.write(req_format.format(peep_hash, url, egg_ext))
 
     print 'Requirements file generated.'
@@ -123,10 +126,10 @@ def generate_requirements(packages, target_dir, tarball_dir):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='peepify')
-    parser.add_argument('--target-dir', required=True,
-                        help='Top level directory for git submodules.')
+    parser.add_argument('--project-dir', required=True,
+                        help='Project directory.')
     parser.add_argument('--tarballs-dir', help='Directory to store tarballs.',
-                        default='.')
+                        default='/tmp')
     args = parser.parse_args()
 
     # Verify peep is installed. Otherwise bail.
@@ -135,8 +138,8 @@ if __name__ == '__main__':
         sys.exit(1)
 
     cwd = os.getcwd()
-    packages = get_packages(args.target_dir)
+    packages = get_packages(args.project_dir)
 
     # Make sure paths line up still.
     os.chdir(cwd)
-    generate_requirements(packages, args.target_dir, args.tarballs_dir)
+    generate_requirements(packages, args.project_dir, args.tarballs_dir)
