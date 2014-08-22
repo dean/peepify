@@ -63,8 +63,12 @@ def get_packages(project_dir):
     submodules = {}
     with open('.gitmodules') as gitmodules:
         lines = [line.rstrip() for line in gitmodules]
-        for i in xrange(0, len(lines)/3, 3):
+        for i in xrange(0, len(lines), 3):
             path = lines[i+1].split(' = ')[1]
+            # Ignore js submodules.
+            if '/js/' in path:
+                continue
+
             url = lines[i+2].split(' = ')[1]
 
             os.chdir(path)
@@ -101,7 +105,7 @@ def generate_requirements(packages, project_dir, tarball_dir):
     @arg: tarball_dir: Directory for downlaoding tar files.
     """
     req_format = '{0}{1}{2}\n\n'
-    req_fn = os.path.abspath('requirements.txt')
+    req_fn = os.path.abspath('peep_requirements.txt')
 
     if not os.path.exists(tarball_dir):
         os.makedirs(tarball_dir)

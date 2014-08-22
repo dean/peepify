@@ -1,0 +1,2 @@
+requests==2.3.0
+https://github.com/erikrose/peep/archive/aad5bbf13eecf2939ad94d465a5b141293030e81.tar.gz#egg=peep

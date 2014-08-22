@@ -16,13 +16,17 @@ Example::
     $ peepify.py --project-dir fjord/ --tarballs_dir tarballs/
 
 
-Requirements:
+Requirements::
 
 * requests
 * peep
 
 ``peep`` must be on your path. If you don't have it on your path, consult
 the peep documentation to install it: https://github.com/erikrose/peep
+
+Installation::
+
+    $ pip install -r requirements.txt
 
 poopify
 =======
